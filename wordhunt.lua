@@ -5,7 +5,7 @@ local player = Players.LocalPlayer
 
 local wordLibrary = {}
 local function loadWordlist()
-    local success, result = pcall(function()
+    local s, r = pcall(function()
         local raw = game:HttpGet("https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt")
         if raw and #raw > 100 then
             wordLibrary = {}
@@ -18,11 +18,9 @@ local function loadWordlist()
         end
         return false
     end)
-    if not success or not result then
+    if not s or not r then
         local fallback = {"the","and","for","are","but","not","you","all","can","had","her","was","one","our","out","day","get","has","him","his","how","its","may","new","now","old","see","two","way","who","boy","did","yet","she","say","too","use"}
-        for _, w in ipairs(fallback) do
-            if #w >= 3 then wordLibrary[w] = true end
-        end
+        for _, w in ipairs(fallback) do if #w >= 3 then wordLibrary[w] = true end end
         print("⚠️ Dung wordlist du phong (" .. #wordLibrary .. " tu)")
     end
 end
@@ -31,54 +29,47 @@ loadWordlist()
 local function getBoard()
     local gui = player.PlayerGui
     if not gui then return nil end
-    local letters = {}
+    local all = {}
     for _, obj in ipairs(gui:GetDescendants()) do
         if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Visible then
             local txt = obj.Text
             if txt and #txt == 1 and txt:match("^[A-Za-z]$") then
                 local pos = obj.AbsolutePosition
                 if pos.X > 0 and pos.Y > 0 then
-                    table.insert(letters, {
+                    table.insert(all, {
                         letter = txt:upper(),
-                        x = pos.X + obj.AbsoluteSize.X / 2,
-                        y = pos.Y + obj.AbsoluteSize.Y / 2,
+                        x = pos.X + obj.AbsoluteSize.X/2,
+                        y = pos.Y + obj.AbsoluteSize.Y/2,
                         obj = obj
                     })
                 end
             end
         end
     end
-    if #letters < 9 then return nil end
-    table.sort(letters, function(a,b)
-        if math.abs(a.y - b.y) > 10 then
-            return a.y < b.y
-        else
-            return a.x < b.x
-        end
+    if #all < 9 then return nil end
+    table.sort(all, function(a,b)
+        if math.abs(a.y - b.y) > 10 then return a.y < b.y else return a.x < b.x end
     end)
     local rows = {}
-    local curRow = {letters[1]}
-    for i = 2, #letters do
-        if math.abs(letters[i].y - letters[i-1].y) > 10 then
-            table.sort(curRow, function(a,b) return a.x < b.x end)
-            table.insert(rows, curRow)
-            curRow = {letters[i]}
+    local cur = {all[1]}
+    for i = 2, #all do
+        if math.abs(all[i].y - all[i-1].y) > 10 then
+            table.sort(cur, function(a,b) return a.x < b.x end)
+            table.insert(rows, cur)
+            cur = {all[i]}
         else
-            table.insert(curRow, letters[i])
+            table.insert(cur, all[i])
         end
     end
-    table.sort(curRow, function(a,b) return a.x < b.x end)
-    table.insert(rows, curRow)
+    table.sort(cur, function(a,b) return a.x < b.x end)
+    table.insert(rows, cur)
     if #rows ~= 5 then return nil end
-    for _, r in ipairs(rows) do
-        if #r ~= 5 then return nil end
-    end
-    local grid = {}
-    local objects = {}
-    for r = 1, 5 do
+    for _, r in ipairs(rows) do if #r ~= 5 then return nil end end
+    local grid, objects = {}, {}
+    for r = 1,5 do
         grid[r] = {}
         objects[r] = {}
-        for c = 1, 5 do
+        for c = 1,5 do
             grid[r][c] = rows[r][c].letter
             objects[r][c] = rows[r][c].obj
         end
@@ -126,7 +117,7 @@ screenGui.ResetOnSpawn = false
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0, 40, 0, 40)
 toggleBtn.Position = UDim2.new(0, 10, 0, 10)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,50)
 toggleBtn.BackgroundTransparency = 0.3
 toggleBtn.Text = "🧩"
 toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
@@ -134,37 +125,36 @@ toggleBtn.TextScaled = true
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.BorderSizePixel = 0
 toggleBtn.Parent = screenGui
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 10)
-toggleCorner.Parent = toggleBtn
+local tc = Instance.new("UICorner")
+tc.CornerRadius = UDim.new(0,10)
+tc.Parent = toggleBtn
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 280, 0, 340)
 mainFrame.Position = UDim2.new(0.5, -140, 0.5, -170)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20,20,30)
 mainFrame.BackgroundTransparency = 0.15
 mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true
 mainFrame.Visible = false
 mainFrame.Parent = screenGui
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 12)
-corner.Parent = mainFrame
+local mc = Instance.new("UICorner")
+mc.CornerRadius = UDim.new(0,12)
+mc.Parent = mainFrame
 
 local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 30)
-titleBar.BackgroundColor3 = Color3.fromRGB(40, 45, 65)
+titleBar.Size = UDim2.new(1,0,0,30)
+titleBar.BackgroundColor3 = Color3.fromRGB(40,45,65)
 titleBar.BackgroundTransparency = 0.3
 titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
-local titleCorner = Instance.new("UICorner")
-titleCorner.CornerRadius = UDim.new(0, 12)
-titleCorner.Parent = titleBar
+local tbc = Instance.new("UICorner")
+tbc.CornerRadius = UDim.new(0,12)
+tbc.Parent = titleBar
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1, -30, 1, 0)
-titleLabel.Position = UDim2.new(0, 10, 0, 0)
+titleLabel.Size = UDim2.new(1,-30,1,0)
+titleLabel.Position = UDim2.new(0,10,0,0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "WORD HUNT"
 titleLabel.TextColor3 = Color3.fromRGB(255,255,255)
@@ -174,9 +164,9 @@ titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = titleBar
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 22, 0, 22)
-closeBtn.Position = UDim2.new(1, -28, 0, 4)
-closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+closeBtn.Size = UDim2.new(0,22,0,22)
+closeBtn.Position = UDim2.new(1,-28,0,4)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
 closeBtn.BackgroundTransparency = 0.5
 closeBtn.Text = "✕"
 closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
@@ -184,32 +174,30 @@ closeBtn.TextScaled = true
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.BorderSizePixel = 0
 closeBtn.Parent = titleBar
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 5)
-closeCorner.Parent = closeBtn
-closeBtn.MouseButton1Click:Connect(function()
-    mainFrame.Visible = false
-end)
+local cc = Instance.new("UICorner")
+cc.CornerRadius = UDim.new(0,5)
+cc.Parent = closeBtn
+closeBtn.MouseButton1Click:Connect(function() mainFrame.Visible = false end)
 
-local dragData = {startPos = nil, startMouse = nil}
+local drag = {startPos=nil, startMouse=nil}
 titleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragData.startMouse = input.Position
-        dragData.startPos = mainFrame.Position
+        drag.startMouse = input.Position
+        drag.startPos = mainFrame.Position
     end
 end)
 titleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement and dragData.startMouse then
-        local delta = input.Position - dragData.startMouse
+    if input.UserInputType == Enum.UserInputType.MouseMovement and drag.startMouse then
+        local delta = input.Position - drag.startMouse
         mainFrame.Position = UDim2.new(
-            dragData.startPos.X.Scale, dragData.startPos.X.Offset + delta.X,
-            dragData.startPos.Y.Scale, dragData.startPos.Y.Offset + delta.Y
+            drag.startPos.X.Scale, drag.startPos.X.Offset + delta.X,
+            drag.startPos.Y.Scale, drag.startPos.Y.Offset + delta.Y
         )
     end
 end)
 titleBar.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragData.startMouse = nil
+        drag.startMouse = nil
     end
 end)
 
@@ -219,8 +207,8 @@ end)
 
 local function createLabel(parent, text, y)
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -16, 0, 18)
-    lbl.Position = UDim2.new(0, 8, 0, y)
+    lbl.Size = UDim2.new(1,-16,0,18)
+    lbl.Position = UDim2.new(0,8,0,y)
     lbl.BackgroundTransparency = 1
     lbl.Text = text
     lbl.TextColor3 = Color3.fromRGB(220,220,230)
@@ -233,38 +221,38 @@ end
 
 local function createSlider(parent, y, min, max, default, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -16, 0, 22)
-    frame.Position = UDim2.new(0, 8, 0, y)
+    frame.Size = UDim2.new(1,-16,0,22)
+    frame.Position = UDim2.new(0,8,0,y)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
 
     local slider = Instance.new("Frame")
-    slider.Size = UDim2.new(0.6, 0, 1, 0)
-    slider.Position = UDim2.new(0, 0, 0, 0)
+    slider.Size = UDim2.new(0.6,0,1,0)
+    slider.Position = UDim2.new(0,0,0,0)
     slider.BackgroundColor3 = Color3.fromRGB(80,80,100)
     slider.BorderSizePixel = 0
     slider.Parent = frame
 
     local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(0, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(100, 180, 255)
+    fill.Size = UDim2.new(0,0,1,0)
+    fill.BackgroundColor3 = Color3.fromRGB(100,180,255)
     fill.BorderSizePixel = 0
     fill.Parent = slider
 
     local knob = Instance.new("TextButton")
-    knob.Size = UDim2.new(0, 14, 0, 14)
-    knob.Position = UDim2.new(0, -7, 0.5, -7)
+    knob.Size = UDim2.new(0,14,0,14)
+    knob.Position = UDim2.new(0,-7,0.5,-7)
     knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
     knob.Text = ""
     knob.BorderSizePixel = 0
     knob.Parent = slider
-    local knobCorner = Instance.new("UICorner")
-    knobCorner.CornerRadius = UDim.new(1, 0)
-    knobCorner.Parent = knob
+    local kc = Instance.new("UICorner")
+    kc.CornerRadius = UDim.new(1,0)
+    kc.Parent = knob
 
     local valueLabel = Instance.new("TextLabel")
-    valueLabel.Size = UDim2.new(0.35, 0, 1, 0)
-    valueLabel.Position = UDim2.new(0.65, 0, 0, 0)
+    valueLabel.Size = UDim2.new(0.35,0,1,0)
+    valueLabel.Position = UDim2.new(0.65,0,0,0)
     valueLabel.BackgroundTransparency = 1
     valueLabel.Text = tostring(default)
     valueLabel.TextColor3 = Color3.fromRGB(255,255,255)
@@ -275,8 +263,8 @@ local function createSlider(parent, y, min, max, default, callback)
     local function update(val)
         val = math.clamp(val, min, max)
         local ratio = (val - min) / (max - min)
-        fill.Size = UDim2.new(ratio, 0, 1, 0)
-        knob.Position = UDim2.new(ratio, -7, 0.5, -7)
+        fill.Size = UDim2.new(ratio,0,1,0)
+        knob.Position = UDim2.new(ratio,-7,0.5,-7)
         valueLabel.Text = string.format("%.1f", val)
         callback(val)
     end
@@ -305,7 +293,7 @@ local function createSlider(parent, y, min, max, default, callback)
     return update
 end
 
-local arrowColor = Color3.fromRGB(255, 200, 50)
+local arrowColor = Color3.fromRGB(255,200,50)
 local arrowTransparency = 0.3
 local arrowThickness = 3
 local arrowBrightness = 1
@@ -347,9 +335,9 @@ local function drawArrow(fromObj, toObj, color, transp, thickness, bright)
     tip.BackgroundTransparency = transp
     tip.BorderSizePixel = 0
     tip.Parent = screenGui
-    local tipCorner = Instance.new("UICorner")
-    tipCorner.CornerRadius = UDim.new(0, 2)
-    tipCorner.Parent = tip
+    local tipc = Instance.new("UICorner")
+    tipc.CornerRadius = UDim.new(0,2)
+    tipc.Parent = tip
     table.insert(arrowObjects, tip)
 end
 
@@ -467,32 +455,32 @@ end
 local yPos = 35
 
 local suggestBtn = Instance.new("TextButton")
-suggestBtn.Size = UDim2.new(0.42, -6, 0, 28)
-suggestBtn.Position = UDim2.new(0.05, 0, 0, yPos)
-suggestBtn.BackgroundColor3 = Color3.fromRGB(60, 140, 255)
+suggestBtn.Size = UDim2.new(0.42,-6,0,28)
+suggestBtn.Position = UDim2.new(0.05,0,0,yPos)
+suggestBtn.BackgroundColor3 = Color3.fromRGB(60,140,255)
 suggestBtn.Text = "🔍 Goi y"
 suggestBtn.TextColor3 = Color3.fromRGB(255,255,255)
 suggestBtn.TextScaled = true
 suggestBtn.Font = Enum.Font.GothamBold
 suggestBtn.BorderSizePixel = 0
 suggestBtn.Parent = mainFrame
-local suggestCorner = Instance.new("UICorner")
-suggestCorner.CornerRadius = UDim.new(0, 6)
-suggestCorner.Parent = suggestBtn
+local sc = Instance.new("UICorner")
+sc.CornerRadius = UDim.new(0,6)
+sc.Parent = suggestBtn
 
 local autoBtn = Instance.new("TextButton")
-autoBtn.Size = UDim2.new(0.42, -6, 0, 28)
-autoBtn.Position = UDim2.new(0.53, 0, 0, yPos)
-autoBtn.BackgroundColor3 = Color3.fromRGB(60, 200, 100)
+autoBtn.Size = UDim2.new(0.42,-6,0,28)
+autoBtn.Position = UDim2.new(0.53,0,0,yPos)
+autoBtn.BackgroundColor3 = Color3.fromRGB(60,200,100)
 autoBtn.Text = "⚡ Tu dong"
 autoBtn.TextColor3 = Color3.fromRGB(255,255,255)
 autoBtn.TextScaled = true
 autoBtn.Font = Enum.Font.GothamBold
 autoBtn.BorderSizePixel = 0
 autoBtn.Parent = mainFrame
-local autoCorner = Instance.new("UICorner")
-autoCorner.CornerRadius = UDim.new(0, 6)
-autoCorner.Parent = autoBtn
+local ac = Instance.new("UICorner")
+ac.CornerRadius = UDim.new(0,6)
+ac.Parent = autoBtn
 
 yPos = yPos + 34
 
