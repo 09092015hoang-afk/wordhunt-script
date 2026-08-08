@@ -28,8 +28,12 @@ loadWordlist()
 
 local function getBoard()
     local gui = player.PlayerGui
-    if not gui then return nil end
+    if not gui then
+        print("❌ Khong tim thay PlayerGui")
+        return nil
+    end
     local found = {}
+    local count = 0
     for _, obj in ipairs(gui:GetDescendants()) do
         if (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("ImageButton")) and obj.Visible then
             local txt = obj.Text
@@ -42,11 +46,15 @@ local function getBoard()
                         y = pos.Y + obj.AbsoluteSize.Y/2,
                         obj = obj
                     })
+                    count = count + 1
                 end
             end
         end
     end
-    if #found < 9 then return nil end
+    if #found < 9 then
+        print("❌ Tim thay " .. #found .. " o chu cai (can >=9)")
+        return nil
+    end
     table.sort(found, function(a,b)
         if math.abs(a.y - b.y) > 10 then return a.y < b.y else return a.x < b.x end
     end)
@@ -63,8 +71,16 @@ local function getBoard()
     end
     table.sort(cur, function(a,b) return a.x < b.x end)
     table.insert(rows, cur)
-    if #rows ~= 5 then return nil end
-    for _, r in ipairs(rows) do if #r ~= 5 then return nil end end
+    if #rows ~= 5 then
+        print("❌ So hang: " .. #rows .. " (can 5)")
+        return nil
+    end
+    for _, r in ipairs(rows) do
+        if #r ~= 5 then
+            print("❌ Hang co " .. #r .. " o (can 5)")
+            return nil
+        end
+    end
     local grid, objects = {}, {}
     for r = 1,5 do
         grid[r] = {}
@@ -74,6 +90,7 @@ local function getBoard()
             objects[r][c] = rows[r][c].obj
         end
     end
+    print("✅ Tim thay bang 5x5")
     return grid, objects
 end
 
@@ -272,13 +289,14 @@ local function createSlider(parent, y, min, max, default, callback)
     end
     update(default)
 
-    local dragging = false
+    local isDragging = false
     local conn = nil
+
     local function startDrag()
-        dragging = true
+        isDragging = true
         if conn then conn:Disconnect() end
         conn = RunService.Heartbeat:Connect(function()
-            if not dragging then return end
+            if not isDragging then return end
             local mousePos = UserInputService:GetMouseLocation()
             local framePos = slider.AbsolutePosition
             local frameSize = slider.AbsoluteSize
@@ -288,19 +306,34 @@ local function createSlider(parent, y, min, max, default, callback)
             update(val)
         end)
     end
+
     local function stopDrag()
-        dragging = false
+        isDragging = false
         if conn then conn:Disconnect() conn = nil end
     end
 
     knob.MouseButton1Down:Connect(startDrag)
     knob.MouseButton1Up:Connect(stopDrag)
     knob.MouseLeave:Connect(function()
-        if dragging then stopDrag() end
+        if isDragging then stopDrag() end
     end)
+
+    slider.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mousePos = input.Position
+            local framePos = slider.AbsolutePosition
+            local frameSize = slider.AbsoluteSize
+            if frameSize.X <= 0 then return end
+            local raw = (mousePos.X - framePos.X) / frameSize.X
+            local val = min + math.clamp(raw, 0, 1) * (max - min)
+            update(val)
+            startDrag()
+        end
+    end)
+
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            if dragging then stopDrag() end
+            if isDragging then stopDrag() end
         end
     end)
 
@@ -325,13 +358,17 @@ local function clearArrows()
 end
 
 local function drawArrow(fromObj, toObj, color, transp, thickness, bright)
-    if not fromObj or not toObj then return end
+    if not fromObj or not toObj then
+        print("⚠️ Khong the ve mui ten: doi tuong null")
+        return
+    end
     clearArrows()
     local fromPos = fromObj.AbsolutePosition + fromObj.AbsoluteSize/2
     local toPos = toObj.AbsolutePosition + toObj.AbsoluteSize/2
     local dx, dy = toPos.X - fromPos.X, toPos.Y - fromPos.Y
     local angle = math.atan2(dy, dx)
     local length = math.sqrt(dx*dx + dy*dy)
+    if length < 1 then return end
     local line = Instance.new("Frame")
     line.Size = UDim2.new(0, length, 0, thickness)
     line.Position = UDim2.new(0, fromPos.X, 0, fromPos.Y - thickness/2)
@@ -341,7 +378,7 @@ local function drawArrow(fromObj, toObj, color, transp, thickness, bright)
     line.BorderSizePixel = 0
     line.Parent = screenGui
     table.insert(arrowObjects, line)
-    local tipSize = 12
+    local tipSize = 14
     local tip = Instance.new("Frame")
     tip.Size = UDim2.new(0, tipSize, 0, tipSize)
     tip.Position = UDim2.new(0, toPos.X - tipSize/2, 0, toPos.Y - tipSize/2)
@@ -390,6 +427,7 @@ local function startSuggestion(path, word)
             local obj2 = getObjectAt(r2,c2)
             if obj1 and obj2 then
                 drawArrow(obj1, obj2, arrowColor, arrowTransparency, arrowThickness, arrowBrightness)
+                print("👉 Mui ten tu o ("..r1..","..c1..") den ("..r2..","..c2..")")
             else
                 print("⚠️ Khong tim thay doi tuong cho o ("..r1..","..c1..") hoac ("..r2..","..c2..")")
             end
@@ -415,12 +453,13 @@ local function startSuggestion(path, word)
                 if mousePos.X >= pos.X and mousePos.X <= pos.X + size.X and
                    mousePos.Y >= pos.Y and mousePos.Y <= pos.Y + size.Y then
                     stepIndex = stepIndex + 1
+                    print("✅ Da bam o ("..r1..","..c1..") - Buoc "..stepIndex.."/"..#currentSuggestion)
                     if stepIndex >= #currentSuggestion then
                         suggestMode = false
                         clearArrows()
                         suggestionConnection:Disconnect()
                         suggestionConnection = nil
-                        print("✅ Hoan thanh: " .. word)
+                        print("🎉 Hoan thanh tu: " .. word)
                     else
                         updateArrow()
                     end
@@ -469,6 +508,7 @@ local function startAuto(path, word)
             UserInputService:SendMouseButtonEvent(pos.X, pos.Y, 0, true, 1)
             task.wait(0.05)
             UserInputService:SendMouseButtonEvent(pos.X, pos.Y, 0, false, 1)
+            print("🖱️ Da click o ("..r..","..c..") - Buoc "..index.."/"..#path)
             index = index + 1
             if index <= #path then
                 local r1,c1 = path[index-1][1], path[index-1][2]
@@ -566,11 +606,38 @@ suggestBtn.MouseButton1Click:Connect(function()
         print("⚠️ Dang chay tu dong, hay dung truoc")
         return
     end
+    print("🔍 Dang tim bang 5x5...")
     local grid, objects = getBoard()
     if not grid then
         print("❌ Khong tim thay bang 5x5")
         return
     end
+    print("🔍 Dang tim tu dai nhat...")
+    local path, word = findLongestWordPath(grid)
+    if not path or #path < 2 then
+        print("❌ Khong tim thay tu nao")
+        return
+    end
+    print("✅ Tim thay: " .. word .. " (" .. #path .. " o)")
+    startSuggestion(path, word)
+end)
+
+autoBtn.MouseButton1Click:Connect(function()
+    if autoRunning then
+        autoRunning = false
+        clearArrows()
+        if suggestionConnection then suggestionConnection:Disconnect() end
+        suggestMode = false
+        print("⏹️ Dung tu dong")
+        return
+    end
+    print("🔍 Dang tim bang 5x5...")
+    local grid, objects = getBoard()
+    if not grid then
+        print("❌ Khong tim thay bang 5x5")
+        return
+    end
+    print("🔍 Dang tim tu dai nhat...")
     local path, word = findLongestWordPath(grid)
     if not path or #path < 2 then
         print("❌ Khong tim thay tu nao")
@@ -580,4 +647,6 @@ suggestBtn.MouseButton1Click:Connect(function()
     startAuto(path, word)
 end)
 
-print("✅ UI ready")
+print("✅ UI ready - Nhan nut 🧩 de mo")
+print("📌 Khi vao tran, nhan 'Goi y' de xem duong di")
+print("📌 Nhan 'Tu dong' de tu dong nhoi tu")
