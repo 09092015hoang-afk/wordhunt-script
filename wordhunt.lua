@@ -4,7 +4,6 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
 local wordLibrary = {}
-
 local function loadWordlist()
     local success, result = pcall(function()
         local raw = game:HttpGet("https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt")
@@ -27,45 +26,64 @@ local function loadWordlist()
         print("⚠️ Dung wordlist du phong (" .. #wordLibrary .. " tu)")
     end
 end
+loadWordlist()
 
 local function getBoard()
-    local gui = player and player.PlayerGui
+    local gui = player.PlayerGui
     if not gui then return nil end
-    local allText = {}
+    local letters = {}
     for _, obj in ipairs(gui:GetDescendants()) do
         if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Visible then
-            local text = obj.Text
-            if text and #text == 1 and text:match("^[A-Za-z]$") then
+            local txt = obj.Text
+            if txt and #txt == 1 and txt:match("^[A-Za-z]$") then
                 local pos = obj.AbsolutePosition
                 if pos.X > 0 and pos.Y > 0 then
-                    table.insert(allText, {letter = text:upper(), x = pos.X + obj.AbsoluteSize.X/2, y = pos.Y + obj.AbsoluteSize.Y/2, obj = obj})
+                    table.insert(letters, {
+                        letter = txt:upper(),
+                        x = pos.X + obj.AbsoluteSize.X / 2,
+                        y = pos.Y + obj.AbsoluteSize.Y / 2,
+                        obj = obj
+                    })
                 end
             end
         end
     end
-    if #allText < 9 then return nil end
-    table.sort(allText, function(a,b)
-        if math.abs(a.y - b.y) > 10 then return a.y < b.y else return a.x < b.x end
+    if #letters < 9 then return nil end
+    table.sort(letters, function(a,b)
+        if math.abs(a.y - b.y) > 10 then
+            return a.y < b.y
+        else
+            return a.x < b.x
+        end
     end)
     local rows = {}
-    local curRow = {allText[1]}
-    for i = 2, #allText do
-        if math.abs(allText[i].y - allText[i-1].y) > 10 then
+    local curRow = {letters[1]}
+    for i = 2, #letters do
+        if math.abs(letters[i].y - letters[i-1].y) > 10 then
             table.sort(curRow, function(a,b) return a.x < b.x end)
             table.insert(rows, curRow)
-            curRow = {allText[i]}
+            curRow = {letters[i]}
         else
-            table.insert(curRow, allText[i])
+            table.insert(curRow, letters[i])
         end
     end
     table.sort(curRow, function(a,b) return a.x < b.x end)
     table.insert(rows, curRow)
     if #rows ~= 5 then return nil end
-    for _, r in ipairs(rows) do if #r ~= 5 then return nil end end
+    for _, r in ipairs(rows) do
+        if #r ~= 5 then return nil end
+    end
     local grid = {}
-    for r=1,5 do grid[r] = {} end
-    for r=1,5 do for c=1,5 do grid[r][c] = rows[r][c].letter end end
-    return grid, rows
+    local objects = {}
+    for r = 1, 5 do
+        grid[r] = {}
+        objects[r] = {}
+        for c = 1, 5 do
+            grid[r][c] = rows[r][c].letter
+            objects[r][c] = rows[r][c].obj
+        end
+    end
+    return grid, objects
 end
 
 local function findLongestWordPath(grid)
@@ -105,13 +123,29 @@ screenGui.Name = "WordHuntUI"
 screenGui.Parent = player.PlayerGui
 screenGui.ResetOnSpawn = false
 
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 40, 0, 40)
+toggleBtn.Position = UDim2.new(0, 10, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+toggleBtn.BackgroundTransparency = 0.3
+toggleBtn.Text = "🧩"
+toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+toggleBtn.TextScaled = true
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Parent = screenGui
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 10)
+toggleCorner.Parent = toggleBtn
+
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 350, 0, 460)
-mainFrame.Position = UDim2.new(0.5, -175, 0.5, -230)
+mainFrame.Size = UDim2.new(0, 280, 0, 340)
+mainFrame.Position = UDim2.new(0.5, -140, 0.5, -170)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-mainFrame.BackgroundTransparency = 0.1
+mainFrame.BackgroundTransparency = 0.15
 mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true
+mainFrame.Visible = false
 mainFrame.Parent = screenGui
 
 local corner = Instance.new("UICorner")
@@ -119,9 +153,9 @@ corner.CornerRadius = UDim.new(0, 12)
 corner.Parent = mainFrame
 
 local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.Size = UDim2.new(1, 0, 0, 30)
 titleBar.BackgroundColor3 = Color3.fromRGB(40, 45, 65)
-titleBar.BackgroundTransparency = 0.2
+titleBar.BackgroundTransparency = 0.3
 titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 local titleCorner = Instance.new("UICorner")
@@ -129,19 +163,21 @@ titleCorner.CornerRadius = UDim.new(0, 12)
 titleCorner.Parent = titleBar
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1, 0, 1, 0)
+titleLabel.Size = UDim2.new(1, -30, 1, 0)
+titleLabel.Position = UDim2.new(0, 10, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "🧩 WORD HUNT BATTLE"
+titleLabel.Text = "WORD HUNT"
 titleLabel.TextColor3 = Color3.fromRGB(255,255,255)
 titleLabel.TextScaled = true
 titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = titleBar
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 28, 0, 28)
-closeBtn.Position = UDim2.new(1, -34, 0, 6)
+closeBtn.Size = UDim2.new(0, 22, 0, 22)
+closeBtn.Position = UDim2.new(1, -28, 0, 4)
 closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-closeBtn.BackgroundTransparency = 0.7
+closeBtn.BackgroundTransparency = 0.5
 closeBtn.Text = "✕"
 closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
 closeBtn.TextScaled = true
@@ -149,37 +185,46 @@ closeBtn.Font = Enum.Font.GothamBold
 closeBtn.BorderSizePixel = 0
 closeBtn.Parent = titleBar
 local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.CornerRadius = UDim.new(0, 5)
 closeCorner.Parent = closeBtn
-closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
+closeBtn.MouseButton1Click:Connect(function()
+    mainFrame.Visible = false
+end)
 
-local drag = {startPos = nil, startMouse = nil}
+local dragData = {startPos = nil, startMouse = nil}
 titleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        drag.startMouse = input.Position
-        drag.startPos = mainFrame.Position
+        dragData.startMouse = input.Position
+        dragData.startPos = mainFrame.Position
     end
 end)
 titleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement and drag.startMouse then
-        local delta = input.Position - drag.startMouse
-        mainFrame.Position = UDim2.new(drag.startPos.X.Scale, drag.startPos.X.Offset + delta.X, drag.startPos.Y.Scale, drag.startPos.Y.Offset + delta.Y)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragData.startMouse then
+        local delta = input.Position - dragData.startMouse
+        mainFrame.Position = UDim2.new(
+            dragData.startPos.X.Scale, dragData.startPos.X.Offset + delta.X,
+            dragData.startPos.Y.Scale, dragData.startPos.Y.Offset + delta.Y
+        )
     end
 end)
 titleBar.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        drag.startMouse = nil
+        dragData.startMouse = nil
     end
+end)
+
+toggleBtn.MouseButton1Click:Connect(function()
+    mainFrame.Visible = not mainFrame.Visible
 end)
 
 local function createLabel(parent, text, y)
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -20, 0, 24)
-    lbl.Position = UDim2.new(0, 10, 0, y)
+    lbl.Size = UDim2.new(1, -16, 0, 18)
+    lbl.Position = UDim2.new(0, 8, 0, y)
     lbl.BackgroundTransparency = 1
     lbl.Text = text
     lbl.TextColor3 = Color3.fromRGB(220,220,230)
-    lbl.TextScaled = true
+    lbl.TextSize = 13
     lbl.Font = Enum.Font.GothamMedium
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Parent = parent
@@ -188,24 +233,27 @@ end
 
 local function createSlider(parent, y, min, max, default, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -20, 0, 28)
-    frame.Position = UDim2.new(0, 10, 0, y)
+    frame.Size = UDim2.new(1, -16, 0, 22)
+    frame.Position = UDim2.new(0, 8, 0, y)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
+
     local slider = Instance.new("Frame")
-    slider.Size = UDim2.new(0.7, 0, 1, 0)
-    slider.Position = UDim2.new(0.15, 0, 0, 0)
+    slider.Size = UDim2.new(0.6, 0, 1, 0)
+    slider.Position = UDim2.new(0, 0, 0, 0)
     slider.BackgroundColor3 = Color3.fromRGB(80,80,100)
     slider.BorderSizePixel = 0
     slider.Parent = frame
+
     local fill = Instance.new("Frame")
     fill.Size = UDim2.new(0, 0, 1, 0)
     fill.BackgroundColor3 = Color3.fromRGB(100, 180, 255)
     fill.BorderSizePixel = 0
     fill.Parent = slider
+
     local knob = Instance.new("TextButton")
-    knob.Size = UDim2.new(0, 16, 0, 16)
-    knob.Position = UDim2.new(0, -8, 0.5, -8)
+    knob.Size = UDim2.new(0, 14, 0, 14)
+    knob.Position = UDim2.new(0, -7, 0.5, -7)
     knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
     knob.Text = ""
     knob.BorderSizePixel = 0
@@ -213,40 +261,47 @@ local function createSlider(parent, y, min, max, default, callback)
     local knobCorner = Instance.new("UICorner")
     knobCorner.CornerRadius = UDim.new(1, 0)
     knobCorner.Parent = knob
+
     local valueLabel = Instance.new("TextLabel")
-    valueLabel.Size = UDim2.new(0.15, 0, 1, 0)
-    valueLabel.Position = UDim2.new(0.85, 0, 0, 0)
+    valueLabel.Size = UDim2.new(0.35, 0, 1, 0)
+    valueLabel.Position = UDim2.new(0.65, 0, 0, 0)
     valueLabel.BackgroundTransparency = 1
     valueLabel.Text = tostring(default)
     valueLabel.TextColor3 = Color3.fromRGB(255,255,255)
-    valueLabel.TextScaled = true
+    valueLabel.TextSize = 12
     valueLabel.Font = Enum.Font.GothamMedium
     valueLabel.Parent = frame
+
     local function update(val)
         val = math.clamp(val, min, max)
         local ratio = (val - min) / (max - min)
         fill.Size = UDim2.new(ratio, 0, 1, 0)
-        knob.Position = UDim2.new(ratio, -8, 0.5, -8)
+        knob.Position = UDim2.new(ratio, -7, 0.5, -7)
         valueLabel.Text = string.format("%.1f", val)
         callback(val)
     end
     update(default)
+
+    local dragging = false
     knob.MouseButton1Down:Connect(function()
-        local connection
-        connection = RunService.Heartbeat:Connect(function()
-            local mousePos = UserInputService:GetMouseLocation()
-            local framePos = slider.AbsolutePosition
-            local frameSize = slider.AbsoluteSize
-            local raw = (mousePos.X - framePos.X) / frameSize.X
-            local val = min + math.clamp(raw, 0, 1) * (max - min)
-            update(val)
-        end)
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                connection:Disconnect()
-            end
-        end)
+        dragging = true
     end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    RunService.Heartbeat:Connect(function()
+        if not dragging then return end
+        local mousePos = UserInputService:GetMouseLocation()
+        local framePos = slider.AbsolutePosition
+        local frameSize = slider.AbsoluteSize
+        if frameSize.X <= 0 then return end
+        local raw = (mousePos.X - framePos.X) / frameSize.X
+        local val = min + math.clamp(raw, 0, 1) * (max - min)
+        update(val)
+    end)
+
     return update
 end
 
@@ -307,7 +362,7 @@ local function startSuggestion(path, word)
     if not grid then suggestMode = false return end
     local function getObjectAt(r,c)
         if objects and objects[r] and objects[r][c] then
-            return objects[r][c].obj
+            return objects[r][c]
         end
         return nil
     end
@@ -334,7 +389,8 @@ local function startSuggestion(path, word)
             if obj then
                 local pos = obj.AbsolutePosition
                 local size = obj.AbsoluteSize
-                if mousePos.X >= pos.X and mousePos.X <= pos.X + size.X and mousePos.Y >= pos.Y and mousePos.Y <= pos.Y + size.Y then
+                if mousePos.X >= pos.X and mousePos.X <= pos.X + size.X and
+                   mousePos.Y >= pos.Y and mousePos.Y <= pos.Y + size.Y then
                     stepIndex = stepIndex + 1
                     if stepIndex >= #currentSuggestion then
                         suggestMode = false
@@ -357,7 +413,7 @@ local function startAuto(path, word)
     if not grid then autoRunning = false return end
     local function getObjectAt(r,c)
         if objects and objects[r] and objects[r][c] then
-            return objects[r][c].obj
+            return objects[r][c]
         end
         return nil
     end
@@ -408,74 +464,72 @@ local function startAuto(path, word)
     clickNext()
 end
 
-loadWordlist()
-
-local yPos = 45
+local yPos = 35
 
 local suggestBtn = Instance.new("TextButton")
-suggestBtn.Size = UDim2.new(0.4, -10, 0, 32)
+suggestBtn.Size = UDim2.new(0.42, -6, 0, 28)
 suggestBtn.Position = UDim2.new(0.05, 0, 0, yPos)
 suggestBtn.BackgroundColor3 = Color3.fromRGB(60, 140, 255)
-suggestBtn.Text = "🔍 Gợi ý"
+suggestBtn.Text = "🔍 Goi y"
 suggestBtn.TextColor3 = Color3.fromRGB(255,255,255)
 suggestBtn.TextScaled = true
 suggestBtn.Font = Enum.Font.GothamBold
 suggestBtn.BorderSizePixel = 0
 suggestBtn.Parent = mainFrame
 local suggestCorner = Instance.new("UICorner")
-suggestCorner.CornerRadius = UDim.new(0, 8)
+suggestCorner.CornerRadius = UDim.new(0, 6)
 suggestCorner.Parent = suggestBtn
 
 local autoBtn = Instance.new("TextButton")
-autoBtn.Size = UDim2.new(0.4, -10, 0, 32)
-autoBtn.Position = UDim2.new(0.55, 0, 0, yPos)
+autoBtn.Size = UDim2.new(0.42, -6, 0, 28)
+autoBtn.Position = UDim2.new(0.53, 0, 0, yPos)
 autoBtn.BackgroundColor3 = Color3.fromRGB(60, 200, 100)
-autoBtn.Text = "⚡ Tự động"
+autoBtn.Text = "⚡ Tu dong"
 autoBtn.TextColor3 = Color3.fromRGB(255,255,255)
 autoBtn.TextScaled = true
 autoBtn.Font = Enum.Font.GothamBold
 autoBtn.BorderSizePixel = 0
 autoBtn.Parent = mainFrame
 local autoCorner = Instance.new("UICorner")
-autoCorner.CornerRadius = UDim.new(0, 8)
+autoCorner.CornerRadius = UDim.new(0, 6)
 autoCorner.Parent = autoBtn
 
-yPos = yPos + 40
+yPos = yPos + 34
 
-createLabel(mainFrame, "⚡ Tốc độ nối (giây/bước)", yPos)
-yPos = yPos + 24
+createLabel(mainFrame, "⚡ Toc do (giay/buoc)", yPos)
+yPos = yPos + 20
 local speedUpdate = createSlider(mainFrame, yPos, 0.1, 1.0, 0.3, function(val) autoSpeed = val end)
-yPos = yPos + 36
+yPos = yPos + 28
 
-createLabel(mainFrame, "🎨 Màu mũi tên", yPos)
-yPos = yPos + 24
+createLabel(mainFrame, "🎨 Mau mui ten", yPos)
+yPos = yPos + 20
 local colorUpdate = createSlider(mainFrame, yPos, 0, 1, 0.5, function(val) arrowColor = Color3.fromHSV(val, 0.8, 0.8) end)
-yPos = yPos + 36
+yPos = yPos + 28
 
-createLabel(mainFrame, "👁️ Độ mờ", yPos)
-yPos = yPos + 24
+createLabel(mainFrame, "👁️ Do mo", yPos)
+yPos = yPos + 20
 local transpUpdate = createSlider(mainFrame, yPos, 0, 0.8, 0.3, function(val) arrowTransparency = val end)
-yPos = yPos + 36
+yPos = yPos + 28
 
-createLabel(mainFrame, "☀️ Độ sáng", yPos)
-yPos = yPos + 24
+createLabel(mainFrame, "☀️ Do sang", yPos)
+yPos = yPos + 20
 local brightUpdate = createSlider(mainFrame, yPos, 0.2, 1.0, 1.0, function(val) arrowBrightness = val end)
-yPos = yPos + 36
+yPos = yPos + 28
 
-createLabel(mainFrame, "📏 Độ dày", yPos)
-yPos = yPos + 24
+createLabel(mainFrame, "📏 Do day", yPos)
+yPos = yPos + 20
 local thickUpdate = createSlider(mainFrame, yPos, 1, 6, 3, function(val) arrowThickness = val end)
 
 suggestBtn.MouseButton1Click:Connect(function()
     if autoRunning then return end
     local grid, objects = getBoard()
-    if not grid then print("❌ Không tìm thấy bảng 5x5") return end
+    if not grid then print("❌ Khong tim thay bang 5x5") return end
     local path, word = findLongestWordPath(grid)
     if not path or #path < 2 then
-        print("❌ Không tìm thấy từ nào")
+        print("❌ Khong tim thay tu nao")
         return
     end
-    print("✅ " .. word .. " (" .. #path .. " ô)")
+    print("✅ " .. word .. " (" .. #path .. " o)")
     startSuggestion(path, word)
 end)
 
@@ -483,14 +537,14 @@ autoBtn.MouseButton1Click:Connect(function()
     if autoRunning then
         autoRunning = false
         clearArrows()
-        print("⏹️ Dừng")
+        print("⏹️ Dung")
         return
     end
     local grid, objects = getBoard()
-    if not grid then print("❌ Không tìm thấy bảng 5x5") return end
+    if not grid then print("❌ Khong tim thay bang 5x5") return end
     local path, word = findLongestWordPath(grid)
     if not path or #path < 2 then
-        print("❌ Không tìm thấy từ nào")
+        print("❌ Khong tim thay tu nao")
         return
     end
     print("✅ Auto: " .. word)
