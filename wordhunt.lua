@@ -1,15 +1,20 @@
--- Script tự động giải Word Hunt Battle (Roblox) cho Delta Executor
--- Sửa lỗi: tải từ điển từ JSON, tối ưu tìm từ bằng Trie, thêm giao diện bật/tắt.
+-- Script tự động giải Word Hunt Battle (Roblox) cho Delta Executor - Phiên bản sửa lỗi quét bảng 5x5
+-- Tác giả: palofsc
+-- Yêu cầu: Delta Executor (hỗ trợ FireClick, getconnections, HttpGet)
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
 
 local TU_DIEN_URL = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json"
-local MAX_DO_DAI_TU = 12 -- Giới hạn độ dài từ để tăng tốc, tránh treo máy
-local KHOANG_CACH_O = 100 -- Khoảng cách trung bình giữa các ô (pixel)
+local MAX_DO_DAI_TU = 12
+local KHOANG_CACH_TOI_THIEU = 30   -- Bỏ qua các ô quá gần nhau (trùng)
+local SAI_SO_VI_TRI = 10            -- Sai số khi so sánh cùng hàng/cột
 
 -- ==================== GIAO DIỆN ====================
+local nutChinh, trangThai, hienThiSoO
+
 local function taoGiaoDien()
     local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
     local manHinh = Instance.new("ScreenGui")
@@ -18,14 +23,14 @@ local function taoGiaoDien()
     manHinh.Parent = playerGui
 
     local khung = Instance.new("Frame")
-    khung.Size = UDim2.new(0, 180, 0, 80)
+    khung.Size = UDim2.new(0, 200, 0, 120)
     khung.Position = UDim2.new(0, 10, 0, 10)
     khung.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     khung.BorderSizePixel = 0
     khung.Parent = manHinh
 
-    local nutChinh = Instance.new("TextButton")
-    nutChinh.Size = UDim2.new(0, 160, 0, 40)
+    nutChinh = Instance.new("TextButton")
+    nutChinh.Size = UDim2.new(0, 180, 0, 40)
     nutChinh.Position = UDim2.new(0, 10, 0, 10)
     nutChinh.Text = "Tự động giải: TẮT"
     nutChinh.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
@@ -34,8 +39,8 @@ local function taoGiaoDien()
     nutChinh.TextSize = 16
     nutChinh.Parent = khung
 
-    local trangThai = Instance.new("TextLabel")
-    trangThai.Size = UDim2.new(0, 160, 0, 20)
+    trangThai = Instance.new("TextLabel")
+    trangThai.Size = UDim2.new(0, 180, 0, 20)
     trangThai.Position = UDim2.new(0, 10, 0, 55)
     trangThai.Text = "Sẵn sàng"
     trangThai.BackgroundTransparency = 1
@@ -44,36 +49,44 @@ local function taoGiaoDien()
     trangThai.TextSize = 14
     trangThai.Parent = khung
 
-    return nutChinh, trangThai
+    hienThiSoO = Instance.new("TextLabel")
+    hienThiSoO.Size = UDim2.new(0, 180, 0, 20)
+    hienThiSoO.Position = UDim2.new(0, 10, 0, 80)
+    hienThiSoO.Text = "Ô: 0 | Hàng: 0 Cột: 0"
+    hienThiSoO.BackgroundTransparency = 1
+    hienThiSoO.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+    hienThiSoO.Font = Enum.Font.SourceSans
+    hienThiSoO.TextSize = 12
+    hienThiSoO.Parent = khung
 end
 
--- ==================== TỪ ĐIỂN ====================
+-- ==================== TỪ ĐIỂN & TRIE ====================
+local trieCache = nil
 local function taiTuDien(url)
-    local duLieuTho, err = pcall(function()
+    local thanhCong, duLieu = pcall(function()
         return game:HttpGet(url)
     end)
-    if not duLieuTho then
+    if not thanhCong or not duLieu then
         warn("Không tải được từ điển, dùng danh sách dự phòng.")
-        return {"hello","world","script","roblox","delta"}
+        return {"hello","world","script","roblox","delta","word","hunt","battle"}
     end
-    local json, errJson = pcall(function()
-        return HttpService:JSONDecode(duLieuTho)
+    local ok, json = pcall(function()
+        return HttpService:JSONDecode(duLieu)
     end)
-    if not json then
-        warn("Parse JSON thất bại, dùng danh sách dự phòng.")
-        return {"hello","world","script","roblox","delta"}
+    if not ok then
+        warn("Parse JSON thất bại.")
+        return {"hello","world","script","roblox","delta","word","hunt","battle"}
     end
     local tuDien = {}
     for tu, _ in pairs(json) do
         tu = tostring(tu):lower()
-        if #tu >= 2 and #tu <= MAX_DO_DAI_TU then
+        if #tu >= 2 and #tu <= MAX_DO_DAI_TU and tu:match("^[a-z]+$") then
             tuDien[#tuDien + 1] = tu
         end
     end
     return tuDien
 end
 
--- Cấu trúc Trie để kiểm tra tiền tố và từ hoàn chỉnh nhanh
 local function xayDungTrie(tuDien)
     local trie = {con = {}, ketThuc = false}
     for _, tu in ipairs(tuDien) do
@@ -90,79 +103,111 @@ local function xayDungTrie(tuDien)
     return trie
 end
 
--- ==================== QUÉT BẢNG ====================
-local function quetBangChu()
-    local gui = Players.LocalPlayer:WaitForChild("PlayerGui")
+-- ==================== QUÉT VÀ PHÂN TÍCH LƯỚI ====================
+local function quetTatCaOChu()
     local cacO = {}
-    local function duyet(troCon)
-        for _, con in ipairs(troCon:GetChildren()) do
-            if con:IsA("TextButton") or con:IsA("ImageButton") then
-                local kyTu = nil
-                if con:IsA("TextButton") then
-                    kyTu = con.Text
-                elseif con:FindFirstChild("TextLabel") then
-                    kyTu = con.TextLabel.Text
-                end
-                if kyTu and #kyTu == 1 and kyTu:match("%a") then
-                    local viTriTuyetDoi = con.AbsolutePosition
-                    table.insert(cacO, {
-                        nut = con,
-                        kyTu = kyTu:lower(),
-                        x = viTriTuyetDoi.X,
-                        y = viTriTuyetDoi.Y,
-                    })
-                end
+    -- Duyệt tất cả descendants trong game (bao gồm CoreGui và PlayerGui)
+    local tatCaCon = {}
+    for _, cha in ipairs({CoreGui, Players.LocalPlayer:WaitForChild("PlayerGui")}) do
+        if cha then
+            for _, con in ipairs(cha:GetDescendants()) do
+                table.insert(tatCaCon, con)
             end
-            duyet(con)
         end
     end
-    duyet(gui)
-    -- Sắp xếp theo tọa độ để xác định lưới
-    table.sort(cacO, function(a, b)
-        if math.abs(a.y - b.y) < KHOANG_CACH_O / 2 then
-            return a.x < b.x
-        else
-            return a.y < b.y
+
+    for _, doiTuong in ipairs(tatCaCon) do
+        if doiTuong:IsA("TextLabel") or doiTuong:IsA("TextButton") or doiTuong:IsA("ImageButton") then
+            local kyTu = nil
+            if doiTuong:IsA("TextLabel") or doiTuong:IsA("TextButton") then
+                kyTu = doiTuong.Text
+            elseif doiTuong:FindFirstChild("TextLabel") then
+                kyTu = doiTuong.TextLabel.Text
+            end
+            if kyTu and #kyTu == 1 and kyTu:match("%a") then
+                local viTri = doiTuong.AbsolutePosition
+                local kichThuoc = doiTuong.AbsoluteSize
+                table.insert(cacO, {
+                    nut = doiTuong,
+                    kyTu = kyTu:lower(),
+                    x = viTri.X + kichThuoc.X / 2,  -- dùng tâm để phân cụm chính xác hơn
+                    y = viTri.Y + kichThuoc.Y / 2,
+                    kichThuocX = kichThuoc.X,
+                    kichThuocY = kichThuoc.Y
+                })
+            end
         end
-    end)
-    return cacO
+    end
+    -- Loại bỏ trùng lặp (nếu cùng vị trí)
+    local mangLoc = {}
+    for _, o in ipairs(cacO) do
+        local trung = false
+        for _, o2 in ipairs(mangLoc) do
+            if math.abs(o.x - o2.x) < KHOANG_CACH_TOI_THIEU and math.abs(o.y - o2.y) < KHOANG_CACH_TOI_THIEU then
+                trung = true
+                break
+            end
+        end
+        if not trung then
+            table.insert(mangLoc, o)
+        end
+    end
+    return mangLoc
 end
 
--- Xây dựng ma trận và ánh xạ chỉ số -> vị trí
-local function phanTichLuoi(cacO)
+local function phanCumThanhLuoi(cacO)
     if #cacO == 0 then return {}, {}, 0, 0 end
-    -- Tìm số cột và hàng
+    -- Phân nhóm theo tọa độ y (hàng)
+    table.sort(cacO, function(a, b) return a.y < b.y end)
     local cacHang = {}
     local hangHienTai = {cacO[1]}
-    local yTruoc = cacO[1].y
+    local yCuoi = cacO[1].y
     for i = 2, #cacO do
-        if math.abs(cacO[i].y - yTruoc) < KHOANG_CACH_O / 2 then
+        if math.abs(cacO[i].y - yCuoi) < (cacO[i].kichThuocY / 2 + SAI_SO_VI_TRI) then
             table.insert(hangHienTai, cacO[i])
         else
             table.insert(cacHang, hangHienTai)
             hangHienTai = {cacO[i]}
-            yTruoc = cacO[i].y
+            yCuoi = cacO[i].y
         end
     end
     table.insert(cacHang, hangHienTai)
+
+    -- Trong mỗi hàng, sắp xếp theo x
+    for _, hang in ipairs(cacHang) do
+        table.sort(hang, function(a, b) return a.x < b.x end)
+    end
+
     local soHang = #cacHang
-    local soCot = #cacHang[1]  -- giả định các hàng đều đủ
-    local luoi = {}  -- ma trận kyTu
-    local viTriNut = {} -- [i][j] = nut
-    for i, hang in ipairs(cacHang) do
-        luoi[i] = {}
-        viTriNut[i] = {}
-        for j, o in ipairs(hang) do
-            luoi[i][j] = o.kyTu
-            viTriNut[i][j] = o.nut
+    if soHang == 0 then return {}, {}, 0, 0 end
+    local soCot = #cacHang[1]  -- giả định tất cả hàng có cùng số cột
+    -- Kiểm tra nếu hàng nào khác số cột, lấy số cột tối đa
+    for _, hang in ipairs(cacHang) do
+        if #hang > soCot then soCot = #hang end
+    end
+
+    local luoi = {}   -- ma trận [dong][cot] = kyTu
+    local viTriNut = {}  -- ma trận nút
+    for dong = 1, soHang do
+        luoi[dong] = {}
+        viTriNut[dong] = {}
+        for cot = 1, soCot do
+            if cacHang[dong][cot] then
+                luoi[dong][cot] = cacHang[dong][cot].kyTu
+                viTriNut[dong][cot] = cacHang[dong][cot].nut
+            else
+                -- Trường hợp ô bị thiếu trong hàng (có thể do lỗi)
+                luoi[dong][cot] = ""
+                viTriNut[dong][cot] = nil
+            end
         end
     end
     return luoi, viTriNut, soHang, soCot
 end
 
--- Tìm tất cả các từ bằng DFS sử dụng Trie
+-- ==================== TÌM TỪ ====================
 local function timTatCaTu(luoi, soHang, soCot, trie)
-    local ketQua = {} -- dùng set để tránh trùng
+    local ketQua = {}
     local daGheTham = {}
     local buocHienTai = {}
     local huong = {
@@ -170,38 +215,44 @@ local function timTatCaTu(luoi, soHang, soCot, trie)
         {0,-1},          {0,1},
         {1,-1},  {1,0},  {1,1}
     }
-    local function dfs(i, j, nutTrie, doDai)
+    local function dfs(dong, cot, nutTrie, doDai)
         if doDai > MAX_DO_DAI_TU then return end
-        local kyTu = luoi[i][j]
+        local kyTu = luoi[dong][cot]
+        if kyTu == "" then return end
         local nutMoi = nutTrie.con[kyTu]
         if not nutMoi then return end
-        daGheTham[i][j] = true
-        buocHienTai[doDai] = {dong = i, cot = j}
+        daGheTham[dong][cot] = true
+        buocHienTai[doDai] = {dong = dong, cot = cot}
         if nutMoi.ketThuc then
             local tu = ""
             for idx = 1, doDai do
                 tu = tu .. luoi[buocHienTai[idx].dong][buocHienTai[idx].cot]
             end
-            ketQua[tu] = {tu = tu, duongDi = {table.unpack(buocHienTai, 1, doDai)}}
+            -- Chỉ lưu nếu chưa có hoặc đường đi dài hơn
+            if not ketQua[tu] or #buocHienTai > #ketQua[tu].duongDi then
+                ketQua[tu] = {tu = tu, duongDi = {table.unpack(buocHienTai, 1, doDai)}}
+            end
         end
         for _, dir in ipairs(huong) do
-            local ni, nj = i + dir[1], j + dir[2]
-            if ni >= 1 and ni <= soHang and nj >= 1 and nj <= soCot and not daGheTham[ni][nj] then
+            local ni, nj = dong + dir[1], cot + dir[2]
+            if ni >= 1 and ni <= soHang and nj >= 1 and nj <= soCot and not daGheTham[ni][nj] and luoi[ni][nj] ~= "" then
                 dfs(ni, nj, nutMoi, doDai + 1)
             end
         end
-        daGheTham[i][j] = false
+        daGheTham[dong][cot] = false
     end
-    -- Khởi tạo mảng đã ghé thăm
+    -- Khởi tạo ma trận đã ghé thăm
     for i = 1, soHang do
         daGheTham[i] = {}
     end
     for i = 1, soHang do
         for j = 1, soCot do
-            dfs(i, j, trie, 1)
+            if luoi[i][j] ~= "" then
+                dfs(i, j, trie, 1)
+            end
         end
     end
-    -- Chuyển kết quả thành danh sách, sắp xếp từ dài nhất
+    -- Chuyển sang danh sách, sắp xếp độ dài giảm dần
     local dsKetQua = {}
     for _, v in pairs(ketQua) do
         dsKetQua[#dsKetQua + 1] = v
@@ -210,7 +261,31 @@ local function timTatCaTu(luoi, soHang, soCot, trie)
     return dsKetQua
 end
 
--- Gửi một từ bằng cách nhấn các nút theo đường đi và nút submit
+-- ==================== GỬI TỪ ====================
+local function timNutGui()
+    -- Tìm nút submit qua tên thông dụng hoặc văn bản
+    local cacNut = {}
+    for _, cha in ipairs({CoreGui, Players.LocalPlayer:WaitForChild("PlayerGui")}) do
+        if cha then
+            for _, con in ipairs(cha:GetDescendants()) do
+                if con:IsA("TextButton") or con:IsA("ImageButton") then
+                    local ten = con.Name:lower()
+                    local vanBan = ""
+                    if con:IsA("TextButton") then vanBan = con.Text:lower() end
+                    if ten:find("submit") or ten:find("enter") or ten:find("send") or ten:find("done") or
+                       vanBan:find("submit") or vanBan:find("enter") or vanBan:find("send") then
+                        table.insert(cacNut, con)
+                    end
+                end
+            end
+        end
+    end
+    if #cacNut > 0 then
+        return cacNut[1]  -- lấy nút đầu tiên khả dụng
+    end
+    return nil
+end
+
 local function guiTu(viTriNut, duongDi)
     for _, buoc in ipairs(duongDi) do
         local nut = viTriNut[buoc.dong][buoc.cot]
@@ -218,7 +293,6 @@ local function guiTu(viTriNut, duongDi)
             pcall(function()
                 nut:FireClick()
             end)
-            -- dự phòng
             local ketNoi = getconnections(nut.MouseButton1Click)
             if ketNoi and #ketNoi > 0 then
                 for _, kn in ipairs(ketNoi) do
@@ -228,9 +302,7 @@ local function guiTu(viTriNut, duongDi)
         end
         task.wait(0.03)
     end
-    -- Nhấn nút gửi (tên thường gặp)
-    local nutGui = Players.LocalPlayer.PlayerGui:FindFirstChild("Submit", true) or
-                   Players.LocalPlayer.PlayerGui:FindFirstChild("SubmitButton", true)
+    local nutGui = timNutGui()
     if nutGui then
         pcall(function() nutGui:FireClick() end)
     end
@@ -238,8 +310,8 @@ local function guiTu(viTriNut, duongDi)
 end
 
 -- ==================== CHƯƠNG TRÌNH CHÍNH ====================
-local nutChinh, trangThai = taoGiaoDien()
 local dangChay = false
+local trieHienTai = nil
 
 local function capNhatNut()
     if dangChay then
@@ -251,56 +323,77 @@ local function capNhatNut()
     end
 end
 
+local function vongLapGiai()
+    while dangChay do
+        -- Quét ô
+        local cacO = quetTatCaOChu()
+        hienThiSoO.Text = "Ô: " .. #cacO .. " | Đang phân tích..."
+        if #cacO == 0 then
+            trangThai.Text = "Không tìm thấy ô chữ"
+            task.wait(2)
+            -- Tiếp tục vòng lặp, dùng goto continue (Lua không có continue, dùng ::continue::)
+            goto tiepTuc
+        end
+        local luoi, viTriNut, soHang, soCot = phanCumThanhLuoi(cacO)
+        hienThiSoO.Text = "Ô: " .. #cacO .. " | Lưới " .. soHang .. "x" .. soCot
+        if soHang < 2 or soCot < 2 then
+            trangThai.Text = "Không phải lưới hợp lệ"
+            task.wait(2)
+            goto tiepTuc
+        end
+        -- Hash bảng hiện tại
+        local banHash = ""
+        for i = 1, soHang do
+            for j = 1, soCot do
+                banHash = banHash .. (luoi[i][j] or "?")
+            end
+        end
+        -- Tải từ điển và xây Trie nếu chưa có
+        if not trieHienTai then
+            trangThai.Text = "Đang tải từ điển..."
+            local tuDien = taiTuDien(TU_DIEN_URL)
+            trieHienTai = xayDungTrie(tuDien)
+        end
+        trangThai.Text = "Đang tìm từ..."
+        local cacTu = timTatCaTu(luoi, soHang, soCot, trieHienTai)
+        trangThai.Text = "Tìm thấy " .. #cacTu .. " từ"
+        -- Gửi từng từ
+        for _, duLieuTu in ipairs(cacTu) do
+            if not dangChay then break end
+            guiTu(viTriNut, duLieuTu.duongDi)
+        end
+        -- Chờ bảng mới
+        trangThai.Text = "Chờ bảng mới..."
+        while dangChay do
+            task.wait(1)
+            local cacOMoi = quetTatCaOChu()
+            local luoiMoi, _, hMoi, cMoi = phanCumThanhLuoi(cacOMoi)
+            local hashMoi = ""
+            for i = 1, hMoi do
+                for j = 1, cMoi do
+                    hashMoi = hashMoi .. (luoiMoi[i][j] or "?")
+                end
+            end
+            if hashMoi ~= banHash and #hashMoi > 0 then
+                break
+            end
+        end
+        ::tiepTuc::
+    end
+    trangThai.Text = "Đã dừng"
+    capNhatNut()
+end
+
 nutChinh.MouseButton1Click:Connect(function()
     dangChay = not dangChay
     capNhatNut()
     if dangChay then
-        trangThai.Text = "Đang quét bảng..."
-        -- Chạy vòng lặp giải
-        task.spawn(function()
-            while dangChay do
-                local cacO = quetBangChu()
-                if #cacO == 0 then
-                    trangThai.Text = "Không thấy bảng chữ"
-                    task.wait(2)
-                    continue
-                end
-                local luoi, viTriNut, soHang, soCot = phanTichLuoi(cacO)
-                if soHang == 0 or soCot == 0 then
-                    trangThai.Text = "Lỗi phân tích lưới"
-                    task.wait(2)
-                    continue
-                end
-                -- Tính mã băm của bảng hiện tại để biết khi nào bảng thay đổi
-                local banDau = ""
-                for _, o in ipairs(cacO) do banDau = banDau .. o.kyTu end
-                -- Tải từ điển và xây Trie (có thể cache để tái sử dụng)
-                local tuDien = taiTuDien(TU_DIEN_URL)
-                local trie = xayDungTrie(tuDien)
-                trangThai.Text = "Đang tìm từ..."
-                local cacTu = timTatCaTu(luoi, soHang, soCot, trie)
-                trangThai.Text = "Tìm thấy " .. #cacTu .. " từ"
-                -- Gửi từng từ
-                for _, duLieuTu in ipairs(cacTu) do
-                    if not dangChay then break end
-                    guiTu(viTriNut, duLieuTu.duongDi)
-                end
-                -- Chờ bảng thay đổi (reset)
-                trangThai.Text = "Chờ bảng mới..."
-                while dangChay do
-                    task.wait(1)
-                    local cacOMoi = quetBangChu()
-                    local banMoi = ""
-                    for _, o in ipairs(cacOMoi) do banMoi = banMoi .. o.kyTu end
-                    if banMoi ~= banDau and #banMoi > 0 then
-                        break
-                    end
-                end
-            end
-            trangThai.Text = "Đã dừng"
-            capNhatNut()
-        end)
+        trangThai.Text = "Bắt đầu..."
+        task.spawn(vongLapGiai)
     else
         trangThai.Text = "Sẵn sàng"
     end
 end)
+
+-- Khởi tạo giao diện
+taoGiaoDien()
