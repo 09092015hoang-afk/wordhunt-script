@@ -1,271 +1,225 @@
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
+-- Script tự động nối từ cho Word Hunt Battle (Roblox) dành cho Delta Executor
+-- Chức năng: Quét bảng chữ, tìm tất cả từ hợp lệ từ từ điển, tự động nhấn nối từ để ghi điểm.
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+-- Cấu hình
+local TU_DIEN_URL = "https://pastebin.com/raw/abc123" -- Thay bằng URL chứa danh sách từ (mỗi từ 1 dòng)
+local KICH_THUOC_O = 80 -- Khoảng cách trung bình giữa các ô (để xác định hàng xóm)
+local THOI_GIAN_CHO = 0.05 -- Độ trễ giữa các lần nhấn ô (giây)
 
-local SIZE = 5
-
-local CONFIG = {
-    minLength = 3,
-    maxLength = 25,
-    scanInterval = 0.5
-}
-
-local VIP = true
-local autoMode = false
-local solving = false
-
-local usedWords = {}
-
-local remotes = ReplicatedStorage:WaitForChild("WordHuntRemotes")
-local submitWord = remotes:WaitForChild("SubmitWord")
-local getBoard = remotes:WaitForChild("GetBoard")
-
-local directions = {
-    {1, 0}, {-1, 0},
-    {0, 1}, {0, -1},
-    {1, 1}, {1, -1},
-    {-1, 1}, {-1, -1}
-}
-
-local dictionary = {
-    cat = true,
-    dog = true,
-    game = true,
-    word = true,
-    hunt = true,
-    hello = true,
-    world = true
-}
-
-local gui = Instance.new("ScreenGui")
-gui.Name = "WordHuntVIP"
-gui.ResetOnSpawn = false
-gui.Parent = playerGui
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.fromOffset(240, 145)
-frame.Position = UDim2.new(1, -260, 1, -180)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-frame.BorderSizePixel = 2
-frame.Parent = gui
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 35)
-title.BackgroundTransparency = 1
-title.Text = "👑 WORD HUNT VIP"
-title.TextColor3 = Color3.fromRGB(255, 215, 0)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 18
-title.Parent = frame
-
-local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, -20, 0, 30)
-status.Position = UDim2.fromOffset(10, 35)
-status.BackgroundTransparency = 1
-status.Text = "VIP: ĐANG KIỂM TRA"
-status.TextColor3 = Color3.new(1, 1, 1)
-status.Font = Enum.Font.Gotham
-status.TextSize = 14
-status.Parent = frame
-
-local autoButton = Instance.new("TextButton")
-autoButton.Size = UDim2.new(1, -20, 0, 35)
-autoButton.Position = UDim2.fromOffset(10, 68)
-autoButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-autoButton.BorderSizePixel = 2
-autoButton.Text = "AUTO: TẮT"
-autoButton.TextColor3 = Color3.new(1, 1, 1)
-autoButton.Font = Enum.Font.GothamBold
-autoButton.TextSize = 15
-autoButton.Parent = frame
-
-local resetButton = Instance.new("TextButton")
-resetButton.Size = UDim2.fromOffset(90, 28)
-resetButton.Position = UDim2.fromOffset(10, 108)
-resetButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-resetButton.BorderSizePixel = 1
-resetButton.Text = "RESET"
-resetButton.TextColor3 = Color3.new(1, 1, 1)
-resetButton.Font = Enum.Font.GothamBold
-resetButton.TextSize = 12
-resetButton.Parent = frame
-
-local resultLabel = Instance.new("TextLabel")
-resultLabel.Size = UDim2.fromOffset(125, 28)
-resultLabel.Position = UDim2.fromOffset(105, 108)
-resultLabel.BackgroundTransparency = 1
-resultLabel.Text = "Chưa có từ"
-resultLabel.TextColor3 = Color3.new(1, 1, 1)
-resultLabel.Font = Enum.Font.Gotham
-resultLabel.TextSize = 12
-resultLabel.Parent = frame
-
-local function notify(text)
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = "Word Hunt VIP",
-            Text = text,
-            Duration = 2
-        })
+-- Hàm tải từ điển
+local function taiTuDien(url)
+    local thanhCong, duLieu = pcall(function()
+        return game:HttpGet(url)
     end)
-end
-
-local function setVIP(value)
-    VIP = value
-
-    if VIP then
-        status.Text = "VIP: ĐÃ KÍCH HOẠT"
-        status.TextColor3 = Color3.fromRGB(0, 255, 120)
-    else
-        status.Text = "VIP: CHƯA KÍCH HOẠT"
-        status.TextColor3 = Color3.fromRGB(255, 80, 80)
-        autoMode = false
-        autoButton.Text = "AUTO: KHÓA"
+    if not thanhCong or not duLieu then
+        -- Nếu không tải được, dùng danh sách dự phòng cơ bản
+        return {"hello", "world", "lua", "script", "roblox", "delta", "word", "hunt", "battle"}
     end
+    local tuDien = {}
+    for tu in duLieu:gmatch("[^\r\n]+") do
+        tu = tu:lower():gsub("%s+", "")
+        if #tu >= 2 then
+            tuDien[#tuDien + 1] = tu
+        end
+    end
+    return tuDien
 end
 
-local function findWords(board)
-    local found = {}
+-- Lớp đại diện cho một ô chữ
+local OChu = {}
+OChu.__index = OChu
+function OChu.moi(nut, kyTu, viTri)
+    return setmetatable({
+        nut = nut,           -- Đối tượng GuiButton gốc
+        kyTu = kyTu:lower(), -- Ký tự trên ô
+        x = viTri.X,         -- Tọa độ trên màn hình
+        y = viTri.Y
+    }, OChu)
+end
 
-    local function dfs(row, col, word, visited)
-        if #word > CONFIG.maxLength then
-            return
+-- Quét tất cả các ô chữ trong giao diện
+local function quetBangChu()
+    local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+    local cacO = {}
+    local function timTrong(troCon)
+        for _, con in ipairs(troCon:GetChildren()) do
+            if con:IsA("TextButton") or con:IsA("ImageButton") then
+                local kyTu = nil
+                if con:IsA("TextButton") then
+                    kyTu = con.Text
+                elseif con:FindFirstChild("TextLabel") then
+                    kyTu = con.TextLabel.Text
+                end
+                if kyTu and #kyTu == 1 and kyTu:match("%a") then
+                    local viTriTuyetDoi = con.AbsolutePosition
+                    local viTri = Vector2.new(viTriTuyetDoi.X, viTriTuyetDoi.Y)
+                    table.insert(cacO, OChu.moi(con, kyTu, viTri))
+                end
+            end
+            timTrong(con)
         end
-
-        if #word >= CONFIG.minLength
-            and dictionary[word]
-            and not usedWords[word] then
-
-            found[word] = true
+    end
+    timTrong(playerGui)
+    -- Sắp xếp các ô theo toạ độ để xác định hàng xóm
+    table.sort(cacO, function(a, b)
+        if math.abs(a.y - b.y) < KICH_THUOC_O / 2 then
+            return a.x < b.x
+        else
+            return a.y < b.y
         end
+    end)
+    return cacO
+end
 
-        for _, direction in ipairs(directions) do
-            local nr = row + direction[1]
-            local nc = col + direction[2]
-
-            if nr >= 1 and nr <= SIZE
-                and nc >= 1 and nc <= SIZE then
-
-                local key = nr .. ":" .. nc
-
-                if not visited[key] then
-                    visited[key] = true
-
-                    dfs(
-                        nr,
-                        nc,
-                        word .. board[nr][nc],
-                        visited
-                    )
-
-                    visited[key] = nil
+-- Xây dựng đồ thị các ô lân cận (8 hướng)
+local function xayDungDoThi(cacO)
+    local doThi = {}
+    for i, o in ipairs(cacO) do
+        doThi[i] = {}
+        for j, oKhac in ipairs(cacO) do
+            if i ~= j then
+                local deltaX = math.abs(o.x - oKhac.x)
+                local deltaY = math.abs(o.y - oKhac.y)
+                if deltaX <= KICH_THUOC_O * 1.2 and deltaY <= KICH_THUOC_O * 1.2 then
+                    table.insert(doThi[i], j)
                 end
             end
         end
     end
-
-    for row = 1, SIZE do
-        for col = 1, SIZE do
-            local visited = {}
-            visited[row .. ":" .. col] = true
-
-            dfs(
-                row,
-                col,
-                board[row][col],
-                visited
-            )
-        end
-    end
-
-    local result = {}
-
-    for word in pairs(found) do
-        result[#result + 1] = word
-    end
-
-    table.sort(result, function(a, b)
-        if #a == #b then
-            return a < b
-        end
-
-        return #a > #b
-    end)
-
-    return result
+    return doThi
 end
 
-local function solve()
-    if not VIP or not autoMode or solving then
-        return
-    end
-
-    solving = true
-
-    local ok, board = pcall(function()
-        return getBoard:InvokeServer()
-    end)
-
-    if not ok or not board then
-        solving = false
-        return
-    end
-
-    local found = findWords(board)
-
-    if #found > 0 then
-        local best = found[1]
-
-        usedWords[best] = true
-        resultLabel.Text = best:upper()
-
-        submitWord:FireServer(best)
-    end
-
-    solving = false
-end
-
-autoButton.MouseButton1Click:Connect(function()
-    if not VIP then
-        notify("Bạn chưa có VIP")
-        return
-    end
-
-    autoMode = not autoMode
-    autoButton.Text = autoMode and "AUTO: BẬT" or "AUTO: TẮT"
-
-    if autoMode then
-        notify("VIP Auto đã bật")
-    else
-        notify("VIP Auto đã tắt")
-    end
-end)
-
-resetButton.MouseButton1Click:Connect(function()
-    usedWords = {}
-    resultLabel.Text = "Đã reset"
-end)
-
-submitWord.OnClientEvent:Connect(function(result, word, score)
-    if result == "Accepted" then
-        resultLabel.Text = word:upper() .. " +" .. score
-    end
-end)
-
-setVIP(true)
-
-autoMode = true
-autoButton.Text = "AUTO: BẬT"
-
-notify("VIP Solver sẵn sàng")
-
-task.spawn(function()
-    while task.wait(CONFIG.scanInterval) do
-        if VIP and autoMode then
-            solve()
+-- Tạo bảng tiền tố để tăng tốc tìm từ
+local function taoBangTienTo(tuDien)
+    local tienTo = {}
+    for _, tu in ipairs(tuDien) do
+        for i = 1, #tu do
+            local tien = tu:sub(1, i)
+            tienTo[tien] = true
         end
     end
-end)
+    return tienTo
+end
+
+-- Duyệt DFS tìm tất cả đường đi cho từ điển
+local function timTatCaCacTu(cacO, doThi, tuDien)
+    local bangTienTo = taoBangTienTo(tuDien)
+    local cacDuongDi = {}
+    local daTham = {}
+    local function dfs(chiSo, hienTai, duongDi)
+        -- Nếu từ hiện tại có trong từ điển, lưu đường đi
+        local tuHienTai = table.concat(hienTai)
+        for _, tu in ipairs(tuDien) do
+            if tu == tuHienTai then
+                table.insert(cacDuongDi, {tu = tu, cacOBuoc = {table.unpack(duongDi)}})
+                break
+            end
+        end
+        -- Thử thêm ký tự mới nếu tiền tố hợp lệ
+        for _, ke in ipairs(doThi[chiSo]) do
+            if not daTham[ke] then
+                local kyTuMoi = cacO[ke].kyTu
+                local tienToMoi = tuHienTai .. kyTuMoi
+                if bangTienTo[tienToMoi] then
+                    daTham[ke] = true
+                    table.insert(hienTai, kyTuMoi)
+                    table.insert(duongDi, ke)
+                    dfs(ke, hienTai, duongDi)
+                    table.remove(duongDi)
+                    table.remove(hienTai)
+                    daTham[ke] = false
+                end
+            end
+        end
+    end
+    for i = 1, #cacO do
+        daTham = {}
+        daTham[i] = true
+        dfs(i, {cacO[i].kyTu}, {i})
+    end
+    -- Loại bỏ trùng lặp, giữ từ dài nhất (để tối đa điểm)
+    local duyNhat = {}
+    for _, duongDi in ipairs(cacDuongDi) do
+        local tu = duongDi.tu
+        if not duyNhat[tu] or #duongDi.cacOBuoc > #duyNhat[tu].cacOBuoc then
+            duyNhat[tu] = duongDi
+        end
+    end
+    local ketQua = {}
+    for _, duongDi in pairs(duyNhat) do
+        table.insert(ketQua, duongDi)
+    end
+    -- Sắp xếp theo độ dài từ giảm dần (từ dài cho điểm cao)
+    table.sort(ketQua, function(a, b) return #a.tu > #b.tu end)
+    return ketQua
+end
+
+-- Mô phỏng nhấn một ô (kích hoạt sự kiện click)
+local function nhapO(o)
+    local nut = o.nut
+    if nut.Visible and nut.Active then
+        -- Thử fireclick trước (hỗ trợ hầu hết executor)
+        pcall(function()
+            nut:FireClick()
+        end)
+        -- Dự phòng bằng cách kích hoạt MouseButton1Click
+        local ketNoi = getconnections(nut.MouseButton1Click)
+        if ketNoi and #ketNoi > 0 then
+            for _, kn in ipairs(ketNoi) do
+                pcall(function()
+                    kn:Fire()
+                end)
+            end
+        end
+        -- Di chuyển chuột đến vị trí và click (cho executor thiếu FireClick)
+        pcall(function()
+            local viTri = nut.AbsolutePosition + nut.AbsoluteSize / 2
+            local vim = game:GetService("VirtualInputManager")
+            vim:SendMouseButtonEvent(viTri.X, viTri.Y, 0, true, game, 0)
+            wait(0.02)
+            vim:SendMouseButtonEvent(viTri.X, viTri.Y, 0, false, game, 0)
+        end)
+    end
+end
+
+-- Gửi một từ bằng cách nhấn theo đường đi
+local function guiTu(cacO, duongDi)
+    local cacChiSo = duongDi.cacOBuoc
+    for _, idx in ipairs(cacChiSo) do
+        nhapO(cacO[idx])
+        wait(THOI_GIAN_CHO)
+    end
+    -- Nhấn nút gửi (giả định tên "SubmitButton", "Submit",... có thể cần chỉnh)
+    local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+    local nutGui = playerGui:FindFirstChild("SubmitButton", true) or
+                   playerGui:FindFirstChild("Submit", true)
+    if nutGui and nutGui:IsA("TextButton") then
+        pcall(function() nutGui:FireClick() end)
+        wait(0.1)
+    end
+end
+
+-- Chương trình chính
+local function chayChuongTrinh()
+    print("Đang quét bảng chữ...")
+    local cacO = quetBangChu()
+    if #cacO == 0 then
+        warn("Không tìm thấy ô chữ nào. Hãy đảm bảo bảng đã hiện.")
+        return
+    end
+    print("Đã tìm thấy " .. #cacO .. " ô chữ.")
+    local doThi = xayDungDoThi(cacO)
+    local tuDien = taiTuDien(TU_DIEN_URL)
+    print("Từ điển đã tải " .. #tuDien .. " từ.")
+    local cacDuongDi = timTatCaCacTu(cacO, doThi, tuDien)
+    print("Tìm thấy " .. #cacDuongDi .. " từ khả dụng.")
+    for i, duongDi in ipairs(cacDuongDi) do
+        print("Gửi từ: " .. duongDi.tu)
+        guiTu(cacO, duongDi)
+        wait(0.2) -- Đợi game xử lý từ
+    end
+    print("Hoàn thành. Tải lại bảng mới (reset) nếu có.")
+end
+
+-- Thực thi
+chayChuongTrinh()
