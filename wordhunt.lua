@@ -2,7 +2,7 @@
 -- Chức năng: Quét bảng chữ, tìm tất cả từ hợp lệ từ từ điển, tự động nhấn nối từ để ghi điểm.
 
 -- Cấu hình
-local TU_DIEN_URL = "https://pastebin.com/raw/abc123" -- Thay bằng URL chứa danh sách từ (mỗi từ 1 dòng)
+local TU_DIEN_URL = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json"
 local KICH_THUOC_O = 80 -- Khoảng cách trung bình giữa các ô (để xác định hàng xóm)
 local THOI_GIAN_CHO = 0.05 -- Độ trễ giữa các lần nhấn ô (giây)
 
