@@ -1,6 +1,6 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
-local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -10,17 +10,18 @@ local SIZE = 5
 local CONFIG = {
     minLength = 3,
     maxLength = 25,
-    scanInterval = 0.8,
-    boardName = "Board",
-    letterType = "TextLabel"
+    scanInterval = 0.5
 }
 
 local VIP = true
-local autoMode = VIP
-local isSolving = false
+local autoMode = false
+local solving = false
 
-local allWords = {}
 local usedWords = {}
+
+local remotes = ReplicatedStorage:WaitForChild("WordHuntRemotes")
+local submitWord = remotes:WaitForChild("SubmitWord")
+local getBoard = remotes:WaitForChild("GetBoard")
 
 local directions = {
     {1, 0}, {-1, 0},
@@ -29,150 +30,104 @@ local directions = {
     {-1, 1}, {-1, -1}
 }
 
-local commonWords = {
-    the = true, and = true, a = true, an = true,
-    is = true, it = true, to = true, of = true,
-    in = true, for = true, on = true, with = true,
-    as = true, at = true, by = true, or = true
+local dictionary = {
+    cat = true,
+    dog = true,
+    game = true,
+    word = true,
+    hunt = true,
+    hello = true,
+    world = true
 }
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "WordHuntVIP"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.fromOffset(240, 145)
+frame.Position = UDim2.new(1, -260, 1, -180)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.BorderSizePixel = 2
+frame.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 35)
+title.BackgroundTransparency = 1
+title.Text = "👑 WORD HUNT VIP"
+title.TextColor3 = Color3.fromRGB(255, 215, 0)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.Parent = frame
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, -20, 0, 30)
+status.Position = UDim2.fromOffset(10, 35)
+status.BackgroundTransparency = 1
+status.Text = "VIP: ĐANG KIỂM TRA"
+status.TextColor3 = Color3.new(1, 1, 1)
+status.Font = Enum.Font.Gotham
+status.TextSize = 14
+status.Parent = frame
+
+local autoButton = Instance.new("TextButton")
+autoButton.Size = UDim2.new(1, -20, 0, 35)
+autoButton.Position = UDim2.fromOffset(10, 68)
+autoButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+autoButton.BorderSizePixel = 2
+autoButton.Text = "AUTO: TẮT"
+autoButton.TextColor3 = Color3.new(1, 1, 1)
+autoButton.Font = Enum.Font.GothamBold
+autoButton.TextSize = 15
+autoButton.Parent = frame
+
+local resetButton = Instance.new("TextButton")
+resetButton.Size = UDim2.fromOffset(90, 28)
+resetButton.Position = UDim2.fromOffset(10, 108)
+resetButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+resetButton.BorderSizePixel = 1
+resetButton.Text = "RESET"
+resetButton.TextColor3 = Color3.new(1, 1, 1)
+resetButton.Font = Enum.Font.GothamBold
+resetButton.TextSize = 12
+resetButton.Parent = frame
+
+local resultLabel = Instance.new("TextLabel")
+resultLabel.Size = UDim2.fromOffset(125, 28)
+resultLabel.Position = UDim2.fromOffset(105, 108)
+resultLabel.BackgroundTransparency = 1
+resultLabel.Text = "Chưa có từ"
+resultLabel.TextColor3 = Color3.new(1, 1, 1)
+resultLabel.Font = Enum.Font.Gotham
+resultLabel.TextSize = 12
+resultLabel.Parent = frame
 
 local function notify(text)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
-            Title = "Word Hunt Pro",
+            Title = "Word Hunt VIP",
             Text = text,
-            Duration = 3
+            Duration = 2
         })
     end)
 end
 
-local function loadJSON(content)
-    local ok, data = pcall(function()
-        return HttpService:JSONDecode(content)
-    end)
+local function setVIP(value)
+    VIP = value
 
-    if not ok then
-        return false
+    if VIP then
+        status.Text = "VIP: ĐÃ KÍCH HOẠT"
+        status.TextColor3 = Color3.fromRGB(0, 255, 120)
+    else
+        status.Text = "VIP: CHƯA KÍCH HOẠT"
+        status.TextColor3 = Color3.fromRGB(255, 80, 80)
+        autoMode = false
+        autoButton.Text = "AUTO: KHÓA"
     end
-
-    for word in pairs(data) do
-        word = word:lower()
-
-        if #word >= CONFIG.minLength
-            and #word <= CONFIG.maxLength
-            and not commonWords[word] then
-
-            allWords[word] = true
-        end
-    end
-
-    return true
 end
 
-local function loadText(content)
-    local count = 0
-
-    for word in content:gmatch("[^\r\n]+") do
-        word = word:lower()
-
-        if #word >= CONFIG.minLength
-            and #word <= CONFIG.maxLength
-            and not commonWords[word] then
-
-            if not allWords[word] then
-                allWords[word] = true
-                count += 1
-            end
-        end
-    end
-
-    return count > 0
-end
-
-local function loadDictionary()
-    allWords = {}
-
-    local urls = {
-        "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
-        "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt"
-    }
-
-    for _, url in ipairs(urls) do
-        local ok, content = pcall(function()
-            return game:HttpGet(url)
-        end)
-
-        if ok and content then
-            local loaded
-
-            if content:match("^%s*{") then
-                loaded = loadJSON(content)
-            else
-                loaded = loadText(content)
-            end
-
-            if loaded then
-                local count = 0
-
-                for _ in pairs(allWords) do
-                    count += 1
-                end
-
-                notify("Đã tải " .. count .. " từ")
-                return true
-            end
-        end
-    end
-
-    notify("Không tải được từ điển")
-    return false
-end
-
-local function getBoard()
-    local board = playerGui:FindFirstChild(CONFIG.boardName, true)
-
-    if not board then
-        return nil
-    end
-
-    local objects = {}
-
-    for _, obj in ipairs(board:GetChildren()) do
-        if obj:IsA(CONFIG.letterType) and #obj.Text == 1 then
-            objects[#objects + 1] = obj
-        end
-    end
-
-    if #objects ~= SIZE * SIZE then
-        return nil
-    end
-
-    table.sort(objects, function(a, b)
-        local ay = a.AbsolutePosition.Y
-        local by = b.AbsolutePosition.Y
-
-        if math.abs(ay - by) < 5 then
-            return a.AbsolutePosition.X < b.AbsolutePosition.X
-        end
-
-        return ay < by
-    end)
-
-    local matrix = {}
-
-    for row = 1, SIZE do
-        matrix[row] = {}
-
-        for col = 1, SIZE do
-            local index = (row - 1) * SIZE + col
-            matrix[row][col] = objects[index].Text:lower()
-        end
-    end
-
-    return matrix
-end
-
-local function findAllWords(board)
+local function findWords(board)
     local found = {}
 
     local function dfs(row, col, word, visited)
@@ -181,30 +136,28 @@ local function findAllWords(board)
         end
 
         if #word >= CONFIG.minLength
-            and allWords[word]
+            and dictionary[word]
             and not usedWords[word] then
 
             found[word] = true
         end
 
         for _, direction in ipairs(directions) do
-            local newRow = row + direction[1]
-            local newCol = col + direction[2]
+            local nr = row + direction[1]
+            local nc = col + direction[2]
 
-            if newRow >= 1
-                and newRow <= SIZE
-                and newCol >= 1
-                and newCol <= SIZE then
+            if nr >= 1 and nr <= SIZE
+                and nc >= 1 and nc <= SIZE then
 
-                local key = newRow .. ":" .. newCol
+                local key = nr .. ":" .. nc
 
                 if not visited[key] then
                     visited[key] = true
 
                     dfs(
-                        newRow,
-                        newCol,
-                        word .. board[newRow][newCol],
+                        nr,
+                        nc,
+                        word .. board[nr][nc],
                         visited
                     )
 
@@ -245,64 +198,74 @@ local function findAllWords(board)
     return result
 end
 
-local function solveBoard()
-    if not VIP or not autoMode or isSolving then
+local function solve()
+    if not VIP or not autoMode or solving then
         return
     end
 
-    isSolving = true
+    solving = true
 
-    local ok, err = pcall(function()
-        local board = getBoard()
-
-        if not board then
-            return
-        end
-
-        local words = findAllWords(board)
-
-        if #words == 0 then
-            return
-        end
-
-        local bestWord = words[1]
-
-        usedWords[bestWord] = true
-
-        print("[WORD HUNT] " .. bestWord:upper())
-
-        notify("Tìm thấy: " .. bestWord:upper())
-
-        -- Game của bạn xử lý bestWord tại đây.
-        -- Ví dụ:
-        -- SubmitWord:FireServer(bestWord)
+    local ok, board = pcall(function()
+        return getBoard:InvokeServer()
     end)
 
-    if not ok then
-        warn("[WORD HUNT ERROR]", err)
-    end
-
-    isSolving = false
-end
-
-local function reset()
-    usedWords = {}
-    notify("Đã reset danh sách từ")
-end
-
-task.spawn(function()
-    if not loadDictionary() then
+    if not ok or not board then
+        solving = false
         return
     end
 
-    if VIP then
-        autoMode = true
-        notify("VIP TEST đã bật")
+    local found = findWords(board)
+
+    if #found > 0 then
+        local best = found[1]
+
+        usedWords[best] = true
+        resultLabel.Text = best:upper()
+
+        submitWord:FireServer(best)
     end
 
+    solving = false
+end
+
+autoButton.MouseButton1Click:Connect(function()
+    if not VIP then
+        notify("Bạn chưa có VIP")
+        return
+    end
+
+    autoMode = not autoMode
+    autoButton.Text = autoMode and "AUTO: BẬT" or "AUTO: TẮT"
+
+    if autoMode then
+        notify("VIP Auto đã bật")
+    else
+        notify("VIP Auto đã tắt")
+    end
+end)
+
+resetButton.MouseButton1Click:Connect(function()
+    usedWords = {}
+    resultLabel.Text = "Đã reset"
+end)
+
+submitWord.OnClientEvent:Connect(function(result, word, score)
+    if result == "Accepted" then
+        resultLabel.Text = word:upper() .. " +" .. score
+    end
+end)
+
+setVIP(true)
+
+autoMode = true
+autoButton.Text = "AUTO: BẬT"
+
+notify("VIP Solver sẵn sàng")
+
+task.spawn(function()
     while task.wait(CONFIG.scanInterval) do
         if VIP and autoMode then
-            solveBoard()
+            solve()
         end
     end
 end)
