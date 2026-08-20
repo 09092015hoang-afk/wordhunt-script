@@ -12,26 +12,30 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "WordHuntGUI"
 screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 420, 0, 480)
 MainFrame.Position = UDim2.new(0.5, -210, 0.5, -240)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-MainFrame.BackgroundTransparency = 0.15
+MainFrame.BackgroundTransparency = 0.1
 MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = false -- dùng code kéo tự viết
 local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 12)
 mainCorner.Parent = MainFrame
 MainFrame.Parent = screenGui
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 35)
-Title.Position = UDim2.new(0, 0, 0, 0)
+Title.Size = UDim2.new(1, -90, 0, 35)
+Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "WORD HUNT 5x5"
 Title.TextColor3 = Color3.fromRGB(255, 200, 100)
 Title.TextScaled = true
 Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = MainFrame
 
 local CloseBtn = Instance.new("TextButton")
@@ -58,10 +62,10 @@ MinimizeBtn.Font = Enum.Font.GothamBold
 MinimizeBtn.Parent = MainFrame
 
 local GridFrame = Instance.new("Frame")
-GridFrame.Size = UDim2.new(0.9, 0, 0.7, 0)
-GridFrame.Position = UDim2.new(0.05, 0, 0.12, 0)
+GridFrame.Size = UDim2.new(0.9, 0, 0.68, 0)
+GridFrame.Position = UDim2.new(0.05, 0, 0.1, 0)
 GridFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-GridFrame.BackgroundTransparency = 0.4
+GridFrame.BackgroundTransparency = 0.35
 local gridCorner = Instance.new("UICorner")
 gridCorner.CornerRadius = UDim.new(0, 8)
 gridCorner.Parent = GridFrame
@@ -73,47 +77,48 @@ for i = 1, 5 do
     Grid[i] = {}
     for j = 1, 5 do
         local box = Instance.new("TextBox")
-        local size = 60
-        local spacing = 10
+        local size = 58
+        local spacing = 8
         box.Size = UDim2.new(0, size, 0, size)
-        box.Position = UDim2.new(0, (j-1)*(size+spacing) + spacing, 0, (i-1)*(size+spacing) + spacing)
-        box.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
-        box.BackgroundTransparency = 0.2
+        box.Position = UDim2.new(0, (j-1)*(size+spacing) + 12, 0, (i-1)*(size+spacing) + 12)
+        box.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+        box.BackgroundTransparency = 0.15
         box.BorderSizePixel = 0
         local boxCorner = Instance.new("UICorner")
         boxCorner.CornerRadius = UDim.new(0, 6)
         boxCorner.Parent = box
-        box.TextColor3 = Color3.fromRGB(51, 51, 51)
+        box.TextColor3 = Color3.fromRGB(230, 230, 230)
         box.Text = ""
         box.PlaceholderText = "?"
-        box.PlaceholderColor3 = Color3.fromRGB(80, 80, 80)
+        box.PlaceholderColor3 = Color3.fromRGB(90, 90, 110)
         box.Font = Enum.Font.GothamBold
-        box.TextSize = 32
+        box.TextSize = 28
         box.ClipsDescendants = true
+        box.ClearTextOnFocus = false
         box.Parent = GridFrame
         table.insert(Cells, box)
         Grid[i][j] = ""
-        
+
         box:GetPropertyChangedSignal("Text"):Connect(function()
             local val = string.sub(box.Text, 1, 1):upper()
             if val:match("%a") then
                 Grid[i][j] = val:lower()
                 box.Text = val
-                box.TextColor3 = Color3.fromRGB(200, 200, 200)
+                box.TextColor3 = Color3.fromRGB(230, 230, 230)
             else
                 Grid[i][j] = ""
                 box.Text = ""
-                box.TextColor3 = Color3.fromRGB(51, 51, 51)
+                box.TextColor3 = Color3.fromRGB(230, 230, 230)
             end
         end)
     end
 end
 
 local CalcBtn = Instance.new("TextButton")
-CalcBtn.Size = UDim2.new(0.8, 0, 0, 40)
+CalcBtn.Size = UDim2.new(0.8, 0, 0, 42)
 CalcBtn.Position = UDim2.new(0.1, 0, 0.86, 0)
-CalcBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-CalcBtn.Text = "▶ TÍNH TOÁN"
+CalcBtn.BackgroundColor3 = Color3.fromRGB(70, 90, 160)
+CalcBtn.Text = "▶  TÍNH TOÁN"
 CalcBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 CalcBtn.TextScaled = true
 CalcBtn.Font = Enum.Font.GothamBold
@@ -122,17 +127,57 @@ btnCorner.CornerRadius = UDim.new(0, 8)
 btnCorner.Parent = CalcBtn
 CalcBtn.Parent = MainFrame
 
+-- Result Frame
 local ResultFrame = Instance.new("ScrollingFrame")
-ResultFrame.Size = UDim2.new(0.9, 0, 0.45, 0)
-ResultFrame.Position = UDim2.new(0.05, 0, 0.12, 0)
+ResultFrame.Size = UDim2.new(0.9, 0, 0.68, 0)
+ResultFrame.Position = UDim2.new(0.05, 0, 0.1, 0)
 ResultFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
-ResultFrame.BackgroundTransparency = 0.4
+ResultFrame.BackgroundTransparency = 0.3
 ResultFrame.BorderSizePixel = 0
 ResultFrame.Visible = false
+ResultFrame.ScrollBarThickness = 6
+ResultFrame.ScrollBarImageColor3 = Color3.fromRGB(120, 120, 160)
+ResultFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ResultFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 local resultCorner = Instance.new("UICorner")
 resultCorner.CornerRadius = UDim.new(0, 8)
 resultCorner.Parent = ResultFrame
 ResultFrame.Parent = MainFrame
+
+local resultListLayout = Instance.new("UIListLayout")
+resultListLayout.Padding = UDim.new(0, 4)
+resultListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+resultListLayout.Parent = ResultFrame
+
+local resultPadding = Instance.new("UIPadding")
+resultPadding.PaddingTop = UDim.new(0, 8)
+resultPadding.PaddingBottom = UDim.new(0, 8)
+resultPadding.PaddingLeft = UDim.new(0, 8)
+resultPadding.PaddingRight = UDim.new(0, 8)
+resultPadding.Parent = ResultFrame
+
+-- Nút quay lại
+local BackBtn = Instance.new("TextButton")
+BackBtn.Size = UDim2.new(0.8, 0, 0, 42)
+BackBtn.Position = UDim2.new(0.1, 0, 0.86, 0)
+BackBtn.BackgroundColor3 = Color3.fromRGB(90, 70, 120)
+BackBtn.Text = "←  QUAY LẠI"
+BackBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+BackBtn.TextScaled = true
+BackBtn.Font = Enum.Font.GothamBold
+BackBtn.Visible = false
+local backCorner = Instance.new("UICorner")
+backCorner.CornerRadius = UDim.new(0, 8)
+backCorner.Parent = BackBtn
+BackBtn.Parent = MainFrame
+
+BackBtn.MouseButton1Click:Connect(function()
+    ResultFrame.Visible = false
+    BackBtn.Visible = false
+    GridFrame.Visible = true
+    CalcBtn.Visible = true
+    MainFrame.Size = UDim2.new(0, 420, 0, 480)
+end)
 
 local WordList = {}
 local fallback = {
@@ -197,16 +242,17 @@ local function FindWordsFromCell(startX, startY)
 end
 
 CalcBtn.MouseButton1Click:Connect(function()
+    -- Xóa kết quả cũ
     for _, child in ipairs(ResultFrame:GetChildren()) do
         if child:IsA("TextLabel") then
             child:Destroy()
         end
     end
-    
+
     local allWords = {}
     for i = 1, 5 do
         for j = 1, 5 do
-            if Grid[i][j] ~= "" then
+            if Grid[i][j] \~= "" then
                 local words = FindWordsFromCell(i, j)
                 for _, w in ipairs(words) do
                     table.insert(allWords, {
@@ -217,76 +263,107 @@ CalcBtn.MouseButton1Click:Connect(function()
             end
         end
     end
-    
+
     table.sort(allWords, function(a, b)
-        if #a.word ~= #b.word then
+        if #a.word \~= #b.word then
             return #a.word > #b.word
         end
         return a.word < b.word
     end)
-    
+
     GridFrame.Visible = false
     CalcBtn.Visible = false
     ResultFrame.Visible = true
+    BackBtn.Visible = true
     MainFrame.Size = UDim2.new(0, 420, 0, 520)
-    
-    local y = 0
+
     local seen = {}
+    local count = 0
     for _, item in ipairs(allWords) do
         if not seen[item.word] then
             seen[item.word] = true
+            count = count + 1
+
             local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(1, -10, 0, 28)
-            lbl.Position = UDim2.new(0, 5, 0, y)
+            lbl.Size = UDim2.new(1, -10, 0, 30)
             lbl.BackgroundTransparency = 1
-            lbl.TextColor3 = Color3.fromRGB(51, 51, 51)
-            lbl.Text = item.word .. "  (ô " .. item.start[1] .. "," .. item.start[2] .. ")"
+            lbl.TextColor3 = Color3.fromRGB(220, 220, 240) -- <-- FIX MÀU CHỮ
+            lbl.Text = string.format("%s   (ô %d,%d)", item.word, item.start[1], item.start[2])
             lbl.Font = Enum.Font.Gotham
             lbl.TextSize = 18
             lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.LayoutOrder = count
             lbl.Parent = ResultFrame
-            y = y + 30
         end
     end
-    ResultFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+
+    if count == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, -10, 0, 40)
+        empty.BackgroundTransparency = 1
+        empty.TextColor3 = Color3.fromRGB(180, 180, 200)
+        empty.Text = "Không tìm thấy từ nào..."
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 18
+        empty.Parent = ResultFrame
+    end
 end)
 
 local isMinimized = false
+local wasShowingResult = false
+
 MinimizeBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
+        wasShowingResult = ResultFrame.Visible
         MainFrame.Size = UDim2.new(0, 420, 0, 40)
         MinimizeBtn.Text = "+"
         GridFrame.Visible = false
         CalcBtn.Visible = false
         ResultFrame.Visible = false
+        BackBtn.Visible = false
     else
-        MainFrame.Size = UDim2.new(0, 420, 0, 480)
         MinimizeBtn.Text = "−"
-        GridFrame.Visible = true
-        CalcBtn.Visible = true
-        ResultFrame.Visible = false
+        if wasShowingResult then
+            MainFrame.Size = UDim2.new(0, 420, 0, 520)
+            ResultFrame.Visible = true
+            BackBtn.Visible = true
+            GridFrame.Visible = false
+            CalcBtn.Visible = false
+        else
+            MainFrame.Size = UDim2.new(0, 420, 0, 480)
+            GridFrame.Visible = true
+            CalcBtn.Visible = true
+            ResultFrame.Visible = false
+            BackBtn.Visible = false
+        end
     end
 end)
 
+-- Kéo frame
 local dragging, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
         startPos = MainFrame.Position
     end
 end)
+
 MainFrame.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
 end)
-MainFrame.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        MainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
     end
 end)
 
-print("Word Hunt 5x5 da chay")
+print("Word Hunt 5x5 đã chạy (UI fixed)")
